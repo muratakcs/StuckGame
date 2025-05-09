@@ -1,0 +1,2 @@
+# StuckGame
+Stuck Game repository
