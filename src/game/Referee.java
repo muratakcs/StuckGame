@@ -8,12 +8,10 @@ public class Referee {
     private static final int MOVE_TIMEOUT_SECONDS = 1;  // ⏳ Max time per move
 
     public static int playGame(Player player, String studentID, String boardFile, boolean enableSnapshots) {
-        int moves = 0;
-        int score = 1; // Minimum participation score (avoid complete failure)
         int boardNumber = extractBoardNumber(boardFile);
         File snapshotFile = new File(String.format("snapshots/Player%s_Board%d.txt", studentID, boardNumber));
 
-        ExecutorService executor = Executors.newSingleThreadExecutor(); // Timeout manager
+        ExecutorService executor = Executors.newSingleThreadExecutor();
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(snapshotFile))) {
             if (enableSnapshots) {
@@ -21,11 +19,11 @@ public class Referee {
             }
 
             while (!player.board.isGameOver()) {
-                Future<Move> futureMove = executor.submit(player::nextMove); // Fix: Ensure we return a `Move` object
+                Future<Move> futureMove = executor.submit(player::nextMove);
                 Move move;
 
                 try {
-                    move = futureMove.get(MOVE_TIMEOUT_SECONDS, TimeUnit.SECONDS); // ⏳ Timeout for moves
+                    move = futureMove.get(MOVE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
                 } catch (TimeoutException e) {
                     System.err.println("⏳ Timeout: Player " + studentID + " took too long to move! Ending game.");
                     break;
@@ -35,31 +33,22 @@ public class Referee {
                 }
 
                 if (move == null) break;
-                if (!player.board.applyMove(move)) { // Fix: Ensure the board uses the correct move type
+                if (!player.board.applyMove(move)) {
                     System.err.println("🚫 Invalid move by Player " + studentID + ": " + move);
                     break;
                 }
 
-                moves++;
-                score = player.board.getScore();
-                player.board.printBoard();
-
                 if (enableSnapshots) {
-                    saveSnapshot(player.board, writer, moves, false);
+                    saveSnapshot(player.board, writer, player.board.getStepCount(), false);
                 }
-
-                Thread.sleep(0);
             }
         } catch (IOException e) {
-            System.err.println("📝 Error writing snapshot for Player " + studentID + ": " + e.getMessage());
-        } catch (InterruptedException e) {
-            System.err.println("🔴 Interrupted during execution for Player " + studentID);
-            Thread.currentThread().interrupt();
+            System.err.println("📍 Error writing snapshot for Player " + studentID + ": " + e.getMessage());
         } finally {
             executor.shutdownNow();
         }
 
-        return score;
+        return player.board.getStepCount();
     }
 
     public static Player initializePlayer(String studentID, Board board) {
@@ -69,15 +58,15 @@ public class Referee {
                 Class<?> playerClass = Class.forName("players.Player" + studentID);
                 return (Player) playerClass.getDeclaredConstructor(Board.class).newInstance(board);
             } catch (Exception e) {
-                return null; // ❌ Failed to initialize
+                return null;
             }
         });
 
         try {
-            return future.get(INIT_TIMEOUT_SECONDS, TimeUnit.SECONDS); // ⏳ Max 2 sec for initialization
+            return future.get(INIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         } catch (TimeoutException e) {
             System.err.println("⏳ Timeout: Player " + studentID + " took too long to initialize!");
-            return null; // ❌ Disqualified due to constructor timeout
+            return null;
         } catch (Exception e) {
             System.err.println("❌ Error initializing player " + studentID + ": " + e.getMessage());
             return null;
@@ -88,7 +77,9 @@ public class Referee {
 
     private static int extractBoardNumber(String boardFile) {
         try {
-            return Integer.parseInt(boardFile.replaceAll("[^0-9]", ""));
+            String name = new File(boardFile).getName();
+            String digits = name.replaceAll("\\D+", "");
+            return Integer.parseInt(digits);
         } catch (NumberFormatException e) {
             return 0;
         }
@@ -101,7 +92,7 @@ public class Referee {
                 if (i == board.getPlayerRow() && j == board.getPlayerCol()) {
                     writer.write("* ");
                 } else if (board.isVisited(i, j)) {
-                    writer.write("  "); // ✅ Ensures visited cells are empty
+                    writer.write("  ");
                 } else {
                     writer.write(board.getValueAt(i, j) + " ");
                 }
